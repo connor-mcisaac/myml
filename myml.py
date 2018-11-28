@@ -26,9 +26,20 @@ class mynet(object):
 		for i in range(self.nlayers):
 			print(np.shape(self.weights[i]), np.shape(self.biases[i]), self.layers[i], end=' ')
 		print('')
+	
+	def evaluate(self, ineval):
+		if np.shape(ineval) != np.array(self.ninput):
+			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
+			raise ValueError(err_msg)
+		else:
+			current = np.copy(ineval)
+			for i in range(self.nlayers):
+				print(np.shape(current))
+				current = np.matmul(current, self.weights[i]) + self.biases[i]
+			return current
 
 
-test = mynet(8, 1)
+test = mynet(8, 3)
 test.print_layers()
 test.add_layer(5, position=0)
 test.print_layers()
@@ -38,3 +49,5 @@ test.add_layer(16, position=-2)
 test.print_layers()
 test.add_layer(9, position=2)
 test.print_layers()
+out = test.evaluate(np.random.randn(8))
+print(out)
