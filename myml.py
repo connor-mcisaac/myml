@@ -7,7 +7,7 @@ class mynet(object):
 
 	def linear(x):
 		return x
-	
+
 	def __init__(self, ninput, noutput, activation=linear):
 		self.nlayers = 1
 		self.ninput = ninput
@@ -30,7 +30,7 @@ class mynet(object):
 		for i in range(self.nlayers):
 			print(np.shape(self.weights[i]), np.shape(self.biases[i]), self.layers[i], end=' ')
 		print('')
-	
+
 	def evaluate(self, ineval):
 		if np.shape(ineval) != np.array(self.ninput):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
