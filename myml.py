@@ -5,10 +5,13 @@ from tensorflow.keras.datasets import mnist
 
 class mynet(object):
 
-	def linear(x):
-		return x
+	def sigmoid(x):
+		return 1/(1 + np.exp(-x))
 
-	def __init__(self, ninput, noutput, activation=linear):
+	def softmax(x):
+		return np.exp(x)/np.sum(np.exp(x))
+
+	def __init__(self, ninput, noutput, activation=sigmoid, finalf=softmax):
 		if type(ninput) != int:
 			err_msg = 'ninput must be an int'
 			raise TypeError(err_msg)
@@ -18,12 +21,16 @@ class mynet(object):
 		if callable(activation) is False:
 			err_msg = 'activation must be a callable function'
 			raise TypeError(err_msg)
+		if callable(finalf) is False:
+			err_msg = 'finalf must be a callable function'
+			raise TypeError(err_msg)
 		self.nlayers = 1
 		self.ninput = ninput
 		self.layers = [noutput]
 		self.weights = [np.random.randn(ninput, noutput)]
 		self.biases = [np.random.randn(noutput)]
 		self.activation = activation
+		self.finalf = finalf
 		self.fulldata = None
 		self.traindata = None
 		self.testdata = None
@@ -58,7 +65,7 @@ class mynet(object):
 			for i in range(self.nlayers):
 				print(np.shape(current))
 				current = self.activation(np.matmul(current, self.weights[i]) + self.biases[i])
-			return current
+			return self.finalf(current)
 
 	def give_data(self, dataset, labels, datatype='all', ftrain=0.5):
 		if len(dataset[0]) != self.ninput:
@@ -99,12 +106,8 @@ def lincut(x):
 	return x.clip(min=0)
 
 
-def sigmoid(x):
-	return 1/(1 + np.exp(-x))
-
-
 np.random.seed(0)
-test = mynet(784, 10, sigmoid)
+test = mynet(784, 10)
 test.print_layers()
 test.add_layer(5, position=0)
 test.print_layers()
@@ -116,6 +119,7 @@ test.add_layer(9, position=2)
 test.print_layers()
 out = test.evaluate(np.random.randn(784))
 print(out)
+print(np.sum(out))
 
 (x_train, y_traini),(x_test, y_testi) = mnist.load_data()
 x_train, x_test = x_train / 255.0, x_test / 255.0
