@@ -27,7 +27,7 @@ class mynet(object):
 		self.nlayers = 1
 		self.ninput = ninput
 		self.layers = [noutput]
-		self.weights = [np.random.randn(ninput, noutput)]
+		self.weights = [np.random.randn(noutput, ninput)]
 		self.biases = [np.random.randn(noutput)]
 		self.activation = activation
 		self.finalf = finalf
@@ -35,7 +35,7 @@ class mynet(object):
 		self.traindata = None
 		self.testdata = None
 
-	def add_layer(self, nnodes, position=None):
+	def add_single_layer(self, nnodes, position=None):
 		if type(nnodes) != int:
 			err_msg = 'nnodes must be an int'
 			raise TypeError(err_msg)
@@ -46,9 +46,19 @@ class mynet(object):
 			raise ValueError(err_msg)
 		self.nlayers += 1
 		self.layers.insert(position, nnodes)
-		self.weights.insert(position, np.random.randn(self.layers[position-1] if position > 0 else self.ninput, nnodes))
-		self.weights[position+1] = np.random.randn(nnodes, self.layers[position+1])
+		self.weights.insert(position, np.random.randn(nnodes, self.layers[position-1] if position > 0 else self.ninput))
+		self.weights[position+1] = np.random.randn(self.layers[position+1], nnodes)
 		self.biases.insert(position, np.random.randn(nnodes))
+
+	def add_layers(self, nodelist, position=None):
+		if type(nodelist) != list:
+			err_msg = 'nodelist must be a list'
+			raise TypeError(err_msg)
+		position = self.nlayers-1 if position is None else position
+		position = self.nlayers + position if position < 0 else position
+		for nnodes in nodelist:
+			self.add_single_layer(nnodes, position=position)
+			position += 1
 
 	def print_layers(self):
 		print(self.ninput, end=' ')
@@ -63,8 +73,7 @@ class mynet(object):
 		else:
 			current = np.copy(ineval)
 			for i in range(self.nlayers):
-				print(np.shape(current))
-				current = self.activation(np.matmul(current, self.weights[i]) + self.biases[i])
+				current = self.activation(np.matmul(self.weights[i], current) + self.biases[i])
 			return self.finalf(current)
 
 	def give_data(self, dataset, labels, datatype='all', ftrain=0.5):
@@ -100,22 +109,15 @@ class mynet(object):
 			self.traindata = [self.fulldata[0][:cut], self.fulldata[1][:cut]]
 			self.testdata = [self.fulldata[0][cut:], self.fulldata[1][cut:]]
 
-
-
-def lincut(x):
-	return x.clip(min=0)
+	#def train_net(repetitions=1, minibatch=None, eta=)
 
 
 np.random.seed(0)
 test = mynet(784, 10)
 test.print_layers()
-test.add_layer(5, position=0)
+test.add_single_layer(5, position=0)
 test.print_layers()
-test.add_layer(3)
-test.print_layers()
-test.add_layer(16, position=-2)
-test.print_layers()
-test.add_layer(9, position=2)
+test.add_layers([4, 3, 2], position=-2)
 test.print_layers()
 out = test.evaluate(np.random.randn(784))
 print(out)
