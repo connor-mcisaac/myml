@@ -5,11 +5,22 @@ from tensorflow.keras.datasets import mnist
 
 class mynet(object):
 
-	def sigmoid(x):
-		return 1/(1 + np.exp(-x))
+	def sigmoid(x, dif=False):
+		if dif is False:
+			return 1/(1 + np.exp(-x))
+		else:
+			return np.exp(-x)/((1 + np.exp(-x))**2)
 
-	def softmax(x):
-		return np.exp(x)/np.sum(np.exp(x))
+	def softmax(x, dif=False):
+		if dif is False:
+			return np.exp(x)/np.sum(np.exp(x))
+		else:
+			y = np.exp(x)/np.sum(np.exp(x))
+			y = y[:, np.newaxis]
+			matrix = np.matmul(y, y.T)
+			matrixd = np.diag(np.diag(np.sqrt(matrix)))
+			return matrixd - matrix
+
 
 	def __init__(self, ninput, noutput, activation=sigmoid, finalf=softmax):
 		if type(ninput) != int:
@@ -109,7 +120,30 @@ class mynet(object):
 			self.traindata = [self.fulldata[0][:cut], self.fulldata[1][:cut]]
 			self.testdata = [self.fulldata[0][cut:], self.fulldata[1][cut:]]
 
-	#def train_net(repetitions=1, minibatch=None, eta=)
+	def backprop(self, ineval, expected):
+		if np.shape(ineval) != np.array(self.ninput):
+			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
+			raise ValueError(err_msg)
+		else:
+			Zs = []
+			As = []
+			current = np.copy(ineval)
+			for i in range(self.nlayers):
+				Z = np.matmul(self.weights[i], current) + self.biases[i]
+				Zs.append(Z)
+				A = self.activation(Z)
+				As.append(A)
+				current = A
+			deltaZs = []
+			deltaBs = []
+			deltaWs = []
+			for i in range(self.nlayers):
+				if i == 0:
+					deltaC = ineval - expected
+					deltaZ = np.matmul(self.finalf(Zs[-1], dif=True), np.array(deltaC))
+					deltaW = np.matmul(np.array(deltaZ), np.array())
+			return self.finalf(current)
+
 
 
 np.random.seed(0)
