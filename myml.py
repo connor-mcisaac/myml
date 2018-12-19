@@ -5,11 +5,13 @@ from tensorflow.keras.datasets import mnist
 
 class mynet(object):
 
+
 	def sigmoid(x, dif=False):
 		if dif is False:
 			return 1/(1 + np.exp(-x))
 		else:
 			return np.exp(-x)/((1 + np.exp(-x))**2)
+
 
 	def softmax(x, dif=False):
 		if dif is False:
@@ -38,13 +40,14 @@ class mynet(object):
 		self.nlayers = 1
 		self.ninput = ninput
 		self.layers = [noutput]
-		self.weights = [np.random.randn(noutput, ninput)]
-		self.biases = [np.random.randn(noutput)]
+		self.weights = [np.random.randn(noutput, ninput)*0.1]
+		self.biases = [np.random.randn(noutput)*0.1]
 		self.activation = activation
 		self.finalf = finalf
 		self.fulldata = None
 		self.traindata = None
 		self.testdata = None
+
 
 	def add_single_layer(self, nnodes, position=None):
 		if type(nnodes) != int:
@@ -57,9 +60,10 @@ class mynet(object):
 			raise ValueError(err_msg)
 		self.nlayers += 1
 		self.layers.insert(position, nnodes)
-		self.weights.insert(position, np.random.randn(nnodes, self.layers[position-1] if position > 0 else self.ninput))
-		self.weights[position+1] = np.random.randn(self.layers[position+1], nnodes)
-		self.biases.insert(position, np.random.randn(nnodes))
+		self.weights.insert(position, np.random.randn(nnodes, self.layers[position-1] if position > 0 else self.ninput)*0.1)
+		self.weights[position+1] = np.random.randn(self.layers[position+1], nnodes)*0.1
+		self.biases.insert(position, np.random.randn(nnodes)*0.1)
+
 
 	def add_layers(self, nodelist, position=None):
 		if type(nodelist) != list:
@@ -71,21 +75,26 @@ class mynet(object):
 			self.add_single_layer(nnodes, position=position)
 			position += 1
 
+
 	def print_layers(self):
 		print(self.ninput, end=' ')
 		for i in range(self.nlayers):
 			print(np.shape(self.weights[i]), np.shape(self.biases[i]), self.layers[i], end=' ')
 		print('')
 
+
 	def evaluate(self, ineval):
 		if np.shape(ineval) != np.array(self.ninput):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
 		else:
-			current = np.copy(ineval)
 			for i in range(self.nlayers):
-				current = self.activation(np.matmul(self.weights[i], current) + self.biases[i])
+				if i == 0:
+					current = np.matmul(self.weights[i], ineval) + self.biases[i]
+				else:
+					current = np.matmul(self.weights[i], self.activation(current)) + self.biases[i]
 			return self.finalf(current)
+
 
 	def give_data(self, dataset, labels, datatype='all', ftrain=0.5):
 		if len(dataset[0]) != self.ninput:
@@ -120,6 +129,7 @@ class mynet(object):
 			self.traindata = [self.fulldata[0][:cut], self.fulldata[1][:cut]]
 			self.testdata = [self.fulldata[0][cut:], self.fulldata[1][cut:]]
 
+
 	def backprop(self, ineval, expected):
 		if np.shape(ineval) != np.array(self.ninput):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
@@ -127,35 +137,88 @@ class mynet(object):
 		else:
 			Zs = []
 			As = []
-			current = np.copy(ineval)
 			for i in range(self.nlayers):
-				Z = np.matmul(self.weights[i], current) + self.biases[i]
-				Zs.append(Z)
-				A = self.activation(Z)
-				As.append(A)
-				current = A
-			deltaZs = []
+				if i == 0:
+					Zs.append(np.matmul(self.weights[i], ineval) + self.biases[i])
+				else:
+					As.append(self.activation(Zs[-1]))
+					Zs.append(np.matmul(self.weights[i], As[-1]) + self.biases[i])
+			As.append(self.finalf(Zs[-1]))
 			deltaBs = []
 			deltaWs = []
 			for i in range(self.nlayers):
 				if i == 0:
-					deltaC = ineval - expected
-					deltaZ = np.matmul(self.finalf(Zs[-1], dif=True), np.array(deltaC))
-					deltaW = np.matmul(np.array(deltaZ), np.array())
-			return self.finalf(current)
+					deltaC = As[-1] - expected
+					deltaBs.append(np.matmul(self.finalf(Zs[-1], dif=True), deltaC))
+					deltaWs.append(np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T))
+				elif i != 0 and i != self.nlayers-1:
+					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
+					deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-i-2])[:, np.newaxis].T))
+				elif i == self.nlayers-1:
+					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
+					deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(ineval)[:, np.newaxis].T))
+			return deltaBs, deltaWs
 
+
+	def mini_batch(self, start, end, eta):
+		n = end-start
+		comBs = []
+		comWs = []
+		for i in range(start, end):
+			deltaBs, deltaWs = self.backprop(self.traindata[0][i], self.traindata[1][i])
+			if i == start:
+				for deltaB in deltaBs:
+					comBs.append(deltaB/n)
+				for deltaW in deltaWs:
+					comWs.append(deltaW/n)
+			else:
+				for j in range(self.nlayers):
+					comBs[j] += deltaBs[j]/n
+				for j in range(self.nlayers):
+					comWs[j] += deltaWs[j]/n
+		for i in range(self.nlayers):
+			self.biases[i] += -eta*comBs[i]
+		for i in range(self.nlayers):
+			self.weights[i] += -eta*comWs[i]
+
+
+	def training_montage(self, batches, rounds, eta, exams=True):
+		trainsize = np.size(self.traindata[0], axis=0)
+		mostsize = trainsize//batches
+		lastsize = mostsize + trainsize%batches
+		if exams is True:
+			examsize = np.size(self.testdata[0], axis=0)
+			passes = 0
+			for j in range(examsize):
+				output = self.evaluate(self.testdata[0][j])
+				if np.argmax(output) == np.argmax(self.testdata[1][j]):
+					passes += 1
+			grade = np.round(100*passes/examsize, decimals=2)
+			print('Before training achieved a grade of ' + str(grade))
+		for i in range(rounds):
+			print('Starting round ' + str(i+1) + '/' + str(rounds))
+			for j in range(batches):
+				if j != batches-1:
+					self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
+				else:
+					self.mini_batch(j*mostsize, j*mostsize + lastsize, eta)
+			if exams is True:
+				passes = 0
+				for j in range(examsize):
+					output = self.evaluate(self.testdata[0][j])
+					if np.argmax(output) == np.argmax(self.testdata[1][j]):
+						passes += 1
+				grade = np.round(100*passes/examsize, decimals=2)
+				announce = ' Achieved a grade of ' + str(grade)
+			else:
+				announce = ''
+			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete!' + announce)
 
 
 np.random.seed(0)
 test = mynet(784, 10)
+test.add_layers([128, 32, 32], position=0)
 test.print_layers()
-test.add_single_layer(5, position=0)
-test.print_layers()
-test.add_layers([4, 3, 2], position=-2)
-test.print_layers()
-out = test.evaluate(np.random.randn(784))
-print(out)
-print(np.sum(out))
 
 (x_train, y_traini),(x_test, y_testi) = mnist.load_data()
 x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -172,3 +235,12 @@ test.give_data(x_train, y_train, datatype='train', ftrain=0.4)
 test.give_data(x_test, y_test, datatype='test', ftrain=0.6)
 print(np.shape(test.traindata[0]), np.shape(test.traindata[1]))
 print(np.shape(test.testdata[0]), np.shape(test.testdata[1]))
+
+test.training_montage(600, 3, 0.05)
+
+print(np.round(test.evaluate(test.testdata[0][100]), decimals=1))
+print(test.testdata[1][100])
+print(np.round(test.evaluate(test.testdata[0][101]), decimals=1))
+print(test.testdata[1][101])
+print(np.round(test.evaluate(test.testdata[0][102]), decimals=1))
+print(test.testdata[1][102])
