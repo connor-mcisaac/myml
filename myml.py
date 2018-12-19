@@ -217,39 +217,3 @@ class mynet(object):
 				announce = ''
 			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete!' + announce)
 
-
-def linact(x, dif=False):
-	if dif is False:
-		x[x < 0] = 0
-		return x
-	else:
-		x[x < 0] = 0
-		x[x > 0] = 1
-		return x
-
-
-test = mynet(784, 10, activation=linact)
-test.add_layers([15, 15])
-
-(x_train, y_traini),(x_test, y_testi) = mnist.load_data()
-x_train, x_test = x_train / 255.0, x_test / 255.0
-x_train = x_train.reshape(len(x_train[:, 0]), -1)
-x_test = x_test.reshape(len(x_test[:, 0]), -1)
-y_train = np.zeros((len(y_traini), 10), dtype='float')
-for i in range(len(y_traini)):
-	y_train[i, y_traini[i]] = 1
-y_test = np.zeros((len(y_testi), 10), dtype='float')
-for i in range(len(y_testi)):
-	y_test[i, y_testi[i]] = 1
-
-test.give_data(x_train, y_train, datatype='train', ftrain=0.4)
-test.give_data(x_test, y_test, datatype='test', ftrain=0.6)
-
-test.training_montage(600, 20, 2)
-
-print(np.round(test.evaluate(test.testdata[0][100]), decimals=1))
-print(test.testdata[1][100])
-print(np.round(test.evaluate(test.testdata[0][101]), decimals=1))
-print(test.testdata[1][101])
-print(np.round(test.evaluate(test.testdata[0][102]), decimals=1))
-print(test.testdata[1][102])
