@@ -88,11 +88,9 @@ class mynet(object):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
 		else:
+			current = ineval.copy()
 			for i in range(self.nlayers):
-				if i == 0:
-					current = np.matmul(self.weights[i], ineval) + self.biases[i]
-				else:
-					current = np.matmul(self.weights[i], self.activation(current)) + self.biases[i]
+				current = self.activation(np.matmul(self.weights[i], current) + self.biases[i])
 			return self.finalf(current)
 
 
@@ -141,15 +139,16 @@ class mynet(object):
 				if i == 0:
 					Zs.append(np.matmul(self.weights[i], ineval) + self.biases[i])
 				else:
-					As.append(self.activation(Zs[-1]))
 					Zs.append(np.matmul(self.weights[i], As[-1]) + self.biases[i])
-			As.append(self.finalf(Zs[-1]))
+				As.append(self.activation(Zs[-1]))
+			answer = self.finalf(As[-1])
 			deltaBs = []
 			deltaWs = []
 			for i in range(self.nlayers):
 				if i == 0:
-					deltaC = As[-1] - expected
-					deltaBs.append(np.matmul(self.finalf(Zs[-1], dif=True), deltaC))
+					deltaC = answer - expected
+					deltaBs.append(np.matmul(self.finalf(As[-1], dif=True), deltaC)*self.activation(Zs[-i-1], dif=True))
+					#deltaBs.append(deltaC*self.activation(Zs[-i-1], dif=True))
 					deltaWs.append(np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T))
 				elif i != 0 and i != self.nlayers-1:
 					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
@@ -189,36 +188,48 @@ class mynet(object):
 		if exams is True:
 			examsize = np.size(self.testdata[0], axis=0)
 			passes = 0
+			averageC = 0
 			for j in range(examsize):
 				output = self.evaluate(self.testdata[0][j])
-				if np.argmax(output) == np.argmax(self.testdata[1][j]):
+				averageC += 0.5/examsize*np.sum((self.testdata[1][j] - output)**2)
+				if np.argmax(output) == np.argmax(self.testdata[1][j]) and np.max(output) > 0.5:
 					passes += 1
 			grade = np.round(100*passes/examsize, decimals=2)
-			print('Before training achieved a grade of ' + str(grade))
+			print('Before training achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5)))
 		for i in range(rounds):
 			print('Starting round ' + str(i+1) + '/' + str(rounds))
 			for j in range(batches):
 				if j != batches-1:
-					self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
+					averageC = self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
 				else:
-					self.mini_batch(j*mostsize, j*mostsize + lastsize, eta)
+					averageC = self.mini_batch(j*mostsize, j*mostsize + lastsize, eta)
 			if exams is True:
 				passes = 0
+				averageC = 0
 				for j in range(examsize):
 					output = self.evaluate(self.testdata[0][j])
-					if np.argmax(output) == np.argmax(self.testdata[1][j]):
+					averageC += 0.5/examsize*np.sum((self.testdata[1][j] - output)**2)
+					if np.argmax(output) == np.argmax(self.testdata[1][j]) and np.max(output) > 0.5:
 						passes += 1
 				grade = np.round(100*passes/examsize, decimals=2)
-				announce = ' Achieved a grade of ' + str(grade)
+				announce = ' Achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5))
 			else:
 				announce = ''
 			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete!' + announce)
 
 
-np.random.seed(0)
-test = mynet(784, 10)
-test.add_layers([128, 32, 32], position=0)
-test.print_layers()
+def linact(x, dif=False):
+	if dif is False:
+		x[x < 0] = 0
+		return x
+	else:
+		x[x < 0] = 0
+		x[x > 0] = 1
+		return x
+
+
+test = mynet(784, 10, activation=linact)
+test.add_layers([15, 15])
 
 (x_train, y_traini),(x_test, y_testi) = mnist.load_data()
 x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -233,10 +244,8 @@ for i in range(len(y_testi)):
 
 test.give_data(x_train, y_train, datatype='train', ftrain=0.4)
 test.give_data(x_test, y_test, datatype='test', ftrain=0.6)
-print(np.shape(test.traindata[0]), np.shape(test.traindata[1]))
-print(np.shape(test.testdata[0]), np.shape(test.testdata[1]))
 
-test.training_montage(600, 3, 0.05)
+test.training_montage(600, 20, 2)
 
 print(np.round(test.evaluate(test.testdata[0][100]), decimals=1))
 print(test.testdata[1][100])
