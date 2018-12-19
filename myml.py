@@ -88,9 +88,11 @@ class mynet(object):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
 		else:
-			current = ineval.copy()
 			for i in range(self.nlayers):
-				current = self.activation(np.matmul(self.weights[i], current) + self.biases[i])
+				if i == 0:
+					current = np.matmul(self.weights[i], ineval) + self.biases[i]
+				else:
+					current = np.matmul(self.weights[i], self.activation(current)) + self.biases[i]
 			return self.finalf(current)
 
 
@@ -140,15 +142,16 @@ class mynet(object):
 					Zs.append(np.matmul(self.weights[i], ineval) + self.biases[i])
 				else:
 					Zs.append(np.matmul(self.weights[i], As[-1]) + self.biases[i])
-				As.append(self.activation(Zs[-1]))
-			answer = self.finalf(As[-1])
+				if i == self.nlayers-1:
+					As.append(self.finalf(Zs[-1]))
+				else:
+					As.append(self.activation(Zs[-1]))
 			deltaBs = []
 			deltaWs = []
 			for i in range(self.nlayers):
 				if i == 0:
-					deltaC = answer - expected
-					deltaBs.append(np.matmul(self.finalf(As[-1], dif=True), deltaC)*self.activation(Zs[-i-1], dif=True))
-					#deltaBs.append(deltaC*self.activation(Zs[-i-1], dif=True))
+					deltaC = As[-1] - expected
+					deltaBs.append(np.matmul(self.finalf(Zs[-1], dif=True), deltaC))
 					deltaWs.append(np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T))
 				elif i != 0 and i != self.nlayers-1:
 					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
