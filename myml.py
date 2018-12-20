@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import matplotlib.pyplot as plt
 from tensorflow.keras.datasets import mnist
 
@@ -201,6 +202,7 @@ class mynet(object):
 			print('Before training achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5)))
 		for i in range(rounds):
 			print('Starting round ' + str(i+1) + '/' + str(rounds))
+			time0 = time.time()
 			for j in range(batches):
 				if j != batches-1:
 					averageC = self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
@@ -218,5 +220,5 @@ class mynet(object):
 				announce = ' Achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5))
 			else:
 				announce = ''
-			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete!' + announce)
+			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete in ' + str(int(time.time()-time0)) + ' seconds!' + announce)
 
