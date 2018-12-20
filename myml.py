@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import matplotlib.pyplot as plt
 from tensorflow.keras.datasets import mnist
 
@@ -78,8 +79,8 @@ class mynet(object):
 
 	def print_layers(self):
 		print(self.ninput, end=' ')
-		for i in range(self.nlayers):
-			print(np.shape(self.weights[i]), np.shape(self.biases[i]), self.layers[i], end=' ')
+		for l, w, b in zip(self.layers, self.weights, self.biases):
+			print(np.shape(w), np.shape(b), l, end=' ')
 		print('')
 
 
@@ -88,11 +89,11 @@ class mynet(object):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
 		else:
-			for i in range(self.nlayers):
+			for i, (w, b) in enumerate(zip(self.weights, self.biases)):
 				if i == 0:
-					current = np.matmul(self.weights[i], ineval) + self.biases[i]
+					current = np.matmul(w, ineval) + b
 				else:
-					current = np.matmul(self.weights[i], self.activation(current)) + self.biases[i]
+					current = np.matmul(w, self.activation(current)) + b
 			return self.finalf(current)
 
 
@@ -134,54 +135,48 @@ class mynet(object):
 		if np.shape(ineval) != np.array(self.ninput):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
+		if np.shape(expected) != np.array(self.layers[-1]):
+			err_msg = 'Expected output must be same size as the output layer (=' + str(self.layers[-1]) + ')'
+			raise ValueError(err_msg)
 		else:
-			Zs = []
-			As = []
-			for i in range(self.nlayers):
+			Zs = [np.zeros(np.shape(b)) for b in self.biases]
+			As = [np.zeros(np.shape(b)) for b in self.biases]
+			for i, (w, b) in enumerate(zip(self.weights, self.biases)):
 				if i == 0:
-					Zs.append(np.matmul(self.weights[i], ineval) + self.biases[i])
+					Zs[i] += np.matmul(w, ineval) + b
 				else:
-					Zs.append(np.matmul(self.weights[i], As[-1]) + self.biases[i])
-				if i == self.nlayers-1:
-					As.append(self.finalf(Zs[-1]))
+					Zs[i] += np.matmul(w, As[i-1]) + b
+				if i != self.nlayers-1:
+					As[i] += self.activation(Zs[i])
 				else:
-					As.append(self.activation(Zs[-1]))
-			deltaBs = []
-			deltaWs = []
-			for i in range(self.nlayers):
-				if i == 0:
-					deltaC = As[-1] - expected
-					deltaBs.append(np.matmul(self.finalf(Zs[-1], dif=True), deltaC))
-					deltaWs.append(np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T))
-				elif i != 0 and i != self.nlayers-1:
-					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
-					deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-i-2])[:, np.newaxis].T))
-				elif i == self.nlayers-1:
-					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
-					deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(ineval)[:, np.newaxis].T))
+					As[i] += self.finalf(Zs[i])
+			deltaBs = [np.zeros(np.shape(b)) for b in self.biases]
+			deltaWs = [np.zeros(np.shape(w)) for w in self.weights]
+			deltaC = As[-1] - expected
+			deltaBs[-1] += np.matmul(self.finalf(Zs[-1], dif=True), deltaC)
+			deltaWs[-1] += np.matmul(deltaBs[-1][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T)
+			for i, (w, z, a) in enumerate(zip(self.weights[2:][::-1], Zs[1:-1][::-1], As[:-2][::-1]), start=2):
+				deltaBs[-i] += np.matmul(w.T, deltaBs[-i+1])*self.activation(z, dif=True)
+				deltaWs[-i] += np.matmul(deltaBs[-i][:, np.newaxis], a[:, np.newaxis].T)
+			deltaBs[0] += np.matmul(self.weights[1].T, deltaBs[1])*self.activation(Zs[0], dif=True)
+			deltaWs[0] += np.matmul(deltaBs[0][:, np.newaxis], ineval[:, np.newaxis].T)
 			return deltaBs, deltaWs
 
 
 	def mini_batch(self, start, end, eta):
 		n = end-start
-		comBs = []
-		comWs = []
+		comBs = [np.zeros(np.shape(b)) for b in self.biases]
+		comWs = [np.zeros(np.shape(w)) for w in self.weights]
 		for i in range(start, end):
 			deltaBs, deltaWs = self.backprop(self.traindata[0][i], self.traindata[1][i])
-			if i == start:
-				for deltaB in deltaBs:
-					comBs.append(deltaB/n)
-				for deltaW in deltaWs:
-					comWs.append(deltaW/n)
-			else:
-				for j in range(self.nlayers):
-					comBs[j] += deltaBs[j]/n
-				for j in range(self.nlayers):
-					comWs[j] += deltaWs[j]/n
-		for i in range(self.nlayers):
-			self.biases[i] += -eta*comBs[i]
-		for i in range(self.nlayers):
-			self.weights[i] += -eta*comWs[i]
+			for j, db in enumerate(deltaBs):
+				comBs[j] += db/n
+			for j, dw in enumerate(deltaWs):
+				comWs[j] += dw/n
+		for i, cb in enumerate(comBs):
+			self.biases[i] += -eta*cb
+		for i, cw in enumerate(comWs):
+			self.weights[i] += -eta*cw
 
 
 	def training_montage(self, batches, rounds, eta, exams=True):
@@ -201,6 +196,7 @@ class mynet(object):
 			print('Before training achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5)))
 		for i in range(rounds):
 			print('Starting round ' + str(i+1) + '/' + str(rounds))
+			time0 = time.time()
 			for j in range(batches):
 				if j != batches-1:
 					averageC = self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
@@ -218,5 +214,6 @@ class mynet(object):
 				announce = ' Achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5))
 			else:
 				announce = ''
-			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete!' + announce)
+			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete in ' + str(int(time.time()-time0)) + ' seconds!' + announce)
+			  
 
