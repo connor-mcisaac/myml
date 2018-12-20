@@ -20,8 +20,10 @@ class mynet(object):
 		else:
 			y = np.exp(x)/np.sum(np.exp(x))
 			y = y[:, np.newaxis]
+			matrixd = np.zeros((len(y), len(y)))
+			for i in range(len(y)):
+				matrixd[i, i] = y[i]
 			matrix = np.matmul(y, y.T)
-			matrixd = np.diag(np.diag(np.sqrt(matrix)))
 			return matrixd - matrix
 
 
@@ -79,8 +81,8 @@ class mynet(object):
 
 	def print_layers(self):
 		print(self.ninput, end=' ')
-		for i in range(self.nlayers):
-			print(np.shape(self.weights[i]), np.shape(self.biases[i]), self.layers[i], end=' ')
+		for l, w, b in zip(self.layers, self.weights, self.biases):
+			print(np.shape(w), np.shape(b), l, end=' ')
 		print('')
 
 
@@ -89,11 +91,9 @@ class mynet(object):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
 		else:
-			for i in range(self.nlayers):
-				if i == 0:
-					current = np.matmul(self.weights[i], ineval) + self.biases[i]
-				else:
-					current = np.matmul(self.weights[i], self.activation(current)) + self.biases[i]
+			current = np.matmul(self.weights[0], ineval) + self.biases[0]
+			for i in range(1, self.nlayers):
+				current = np.matmul(self.weights[i], self.activation(current)) + self.biases[i]
 			return self.finalf(current)
 
 
@@ -136,30 +136,21 @@ class mynet(object):
 			err_msg = 'Input must be same size as the input layer (=' + str(self.ninput) + ')'
 			raise ValueError(err_msg)
 		else:
-			Zs = []
-			As = []
-			for i in range(self.nlayers):
-				if i == 0:
-					Zs.append(np.matmul(self.weights[i], ineval) + self.biases[i])
-				else:
-					Zs.append(np.matmul(self.weights[i], As[-1]) + self.biases[i])
-				if i == self.nlayers-1:
-					As.append(self.finalf(Zs[-1]))
-				else:
-					As.append(self.activation(Zs[-1]))
-			deltaBs = []
-			deltaWs = []
-			for i in range(self.nlayers):
-				if i == 0:
-					deltaC = As[-1] - expected
-					deltaBs.append(np.matmul(self.finalf(Zs[-1], dif=True), deltaC))
-					deltaWs.append(np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T))
-				elif i != 0 and i != self.nlayers-1:
-					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
-					deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-i-2])[:, np.newaxis].T))
-				elif i == self.nlayers-1:
-					deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
-					deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(ineval)[:, np.newaxis].T))
+			Zs = [np.matmul(self.weights[0], ineval) + self.biases[0]]
+			As = [self.activation(Zs[0])]
+			for i in range(1, self.nlayers-1):
+				Zs.append(np.matmul(self.weights[i], As[-1]) + self.biases[i])
+				As.append(self.activation(Zs[-1]))
+			Zs.append(np.matmul(self.weights[-1], As[-1]) + self.biases[-1])
+			As.append(self.finalf(Zs[-1]))
+			deltaC = As[-1] - expected
+			deltaBs = [np.matmul(self.finalf(Zs[-1], dif=True), deltaC)]
+			deltaWs = [np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-2])[:, np.newaxis].T)]
+			for i in range(1, self.nlayers-1):
+				deltaBs.insert(0, np.matmul(self.weights[-i].T, deltaBs[0])*self.activation(Zs[-i-1], dif=True))
+				deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(As[-i-2])[:, np.newaxis].T))
+			deltaBs.insert(0, np.matmul(self.weights[1].T, deltaBs[0])*self.activation(Zs[0], dif=True))
+			deltaWs.insert(0, np.matmul(deltaBs[0][:, np.newaxis], np.array(ineval)[:, np.newaxis].T))
 			return deltaBs, deltaWs
 
 
@@ -203,11 +194,9 @@ class mynet(object):
 		for i in range(rounds):
 			print('Starting round ' + str(i+1) + '/' + str(rounds))
 			time0 = time.time()
-			for j in range(batches):
-				if j != batches-1:
-					averageC = self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
-				else:
-					averageC = self.mini_batch(j*mostsize, j*mostsize + lastsize, eta)
+			for j in range(batches-1):
+				averageC = self.mini_batch(j*mostsize, (j+1)*mostsize, eta)
+			averageC = self.mini_batch((batches-1)*mostsize, (batches-1)*mostsize + lastsize, eta)
 			if exams is True:
 				passes = 0
 				averageC = 0
@@ -220,5 +209,5 @@ class mynet(object):
 				announce = ' Achieved a grade of ' + str(grade) + ' with an average cost of ' + str(np.round(averageC, decimals=5))
 			else:
 				announce = ''
-			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete in ' + str(int(time.time()-time0)) + ' seconds!' + announce)
+			print('Round ' + str(i+1) + '/' + str(rounds) + ' complete in ' + str(np.round(time.time()-time0, decimals=3)) + ' seconds!' + announce)
 
