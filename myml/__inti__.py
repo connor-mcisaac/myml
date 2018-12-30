@@ -1,1 +1,1 @@
-from myml import mynet
+from .myml import mynet
