@@ -1,43 +1,84 @@
-import numpy as np
+import numpy
 from scipy.interpolate import interp1d
+
+
+def create_diag(n):
+    d = numpy.zeros((n**n), dtype=numpy.float64)
+    j = numpy.sum([n**i for i in range(n)])
+    for i in range(n):
+        d[i*j] += 1
+    return d.reshape([n for i in range(n)])
+
+
+def create_diag2D(n):
+    d = numpy.zeros((n, n), dtype=numpy.float64)
+    for i in range(n):
+        d[i, i] += 1
+    return d
 
 
 class draw1D(object):
 
     def __init__(self, function, lower, upper, args=None):
-        xs = np.linspace(lower, upper, num=1000, endpoint=True)
+        xs = numpy.linspace(lower, upper, num=1000, endpoint=True)
+        ps = numpy.zeros((1000), dtype=numpy.float64)
         if args is None:
-            ps = function(xs)
+            for i in range(1000):
+                ps[i] += function(xs[i])
         else:
-            ps = function(xs, *args)
-        cs = np.cumsum(ps)
+            for i in range(1000):
+                ps[i] += function(xs[i], *args)
+        cs = numpy.cumsum(ps)
         cs /= cs[-1]
         self.drawer = interp1d(cs, xs, bounds_error=False,
                                fill_value='extrapolate')
 
     def __call__(self, n):
-        u = np.random.rand(n)
+        u = numpy.random.rand(n)
         draws = self.drawer(u)
         return draws
 
 
+class mn(object):
+
+    def __init__(self, m, c):
+        self.dim = numpy.size(m)
+        self.m = m
+        self.c = c
+        if self.dim == 1:
+            self.ic = 1/c
+            self.dc = c
+        else:
+            self.ic = numpy.linalg.inv(c)
+            self.dc = numpy.linalg.det(c)
+
+    def __call__(self, x):
+        if self.dim == 1:
+            return (numpy.exp(-0.5*(x-self.m)*self.ic*(x-self.m))
+                    /numpy.sqrt((((2*numpy.pi)**self.dim)*self.dc)))
+        else:
+            return (numpy.exp(-0.5*(x-self.m).T@self.ic@(x-self.m))
+                    /numpy.sqrt((((2*numpy.pi)**self.dim)*self.dc)))
+
+
 class mymetropolis(object):
 
-
-    def __init__(self, ndim, nwalkers, lnp, lnl):
+    def __init__(self, ndim, nwalkers, lnp, lnl, pargs=[], largs=[]):
         self.ndim = ndim
         self.nwalkers = nwalkers
         self.lnp = lnp
         self.lnl = lnl
-        self.w = np.random.randn(self.nwalkers, self.ndim)
+        self.pargs = pargs
+        self.largs = largs
+        self.w = numpy.random.randn(self.nwalkers, self.ndim)
 
     def lnf(self, x):
-        p = self.lnp(x)
-        if not np.isfinite(p):
-            return -np.inf
-        l = self.lnl(x)
-        if not np.isfinite(l):
-            return -np.inf
+        p = self.lnp(x, *self.pargs)
+        if not numpy.isfinite(p):
+            return -numpy.inf
+        l = self.lnl(x, *self.largs)
+        if not numpy.isfinite(l):
+            return -numpy.inf
         return p + l
 
     def set_initial(self, x):
@@ -47,26 +88,30 @@ class mymetropolis(object):
             raise ValueError(err_msg)
         self.w = x
 
-    def set_q(self, q, lower=-1, upper=1):
-        if callable(q):
-            self.qtra = draw1D(q, lower, upper)
-        elif type(q) == np.ndarray:
-            self.qcov = q
-            if self.ndim == 1:
-                self.qtra = q
-            else:
-                self.qtra = np.linalg.cholesky(q)
+    def set_q(self, q=None, lower=-1, upper=1, c=None):
+        if c is None:
+            self.qcov = create_diag2D(self.ndim)
+        elif type(c) == numpy.ndarray:
+            self.qcov = c
+        if self.ndim == 1:
+            self.qtra = numpy.sqrt(self.qcov)
+        else:
+            self.qtra = numpy.linalg.cholesky(self.qcov)
+        if q is None:
+            self.q = mn(numpy.zeros((self.ndim)), create_diag2D(self.ndim))
+            self.qdraw = numpy.random.randn
+        elif callable(q):
+            self.q = q
+            self.qdraw = draw1D(q, lower, upper)
 
     def draw_q(self, n):
-        if not callable(self.qtra):
-            norm = np.random.randn(n, self.ndim)
-            draws = norm@self.qtra.T
-        else:
-            draws = np.zeros((n, self.ndim))
-            for i in range(n):
-                draws[i, :] = self.qtra(self.ndim)
+        draws = numpy.zeros((n, self.ndim))
+        for i in range(self.ndim):
+            draws[:, i] += self.qdraw(n)
         if self.ndim == 1:
-            draws = np.reshape(draws, (-1, 1))
+            draws = numpy.reshape(draws, (-1, 1))*self.qtra
+        else:
+            draws = draws@self.qtra.T
         return draws
 
     def propose_step(self):
@@ -74,19 +119,39 @@ class mymetropolis(object):
         return self.w + add
 
     def ratio(self, x):
-        ratios = np.zeros(x.shape[0], dtype=np.float64)
+        ratios = numpy.zeros(x.shape[0], dtype=numpy.float64)
         for i in range(x.shape[0]):
             ratios[i] = self.lnf(x[i, :]) - self.lnf(self.w[i, :])
         return ratios
 
     def step(self, n):
-        chains = np.zeros((n, self.nwalkers, self.ndim), dtype=np.float64)
+        chains = numpy.zeros((n, self.nwalkers, self.ndim), dtype=numpy.float64)
         for i in range(n):
             proposed = self.propose_step()
             Q = self.ratio(proposed)
-            R = np.random.rand(self.nwalkers)
+            R = numpy.random.rand(self.nwalkers)
             for j in range(self.nwalkers):
-                if Q[j] > np.log(R[j]):
+                if Q[j] > numpy.log(R[j]):
                     self.w[j, :] = proposed[j, :]
             chains[i, :, :] += self.w
-        return np.reshape(chains, (n*self.nwalkers, self.ndim)), chains
+        return numpy.reshape(chains, (n*self.nwalkers, self.ndim)), chains
+
+
+class mymh(mymetropolis):
+
+    def __init__(self, ndim, nwalkers, lnp, lnl, pargs=[], largs=[]):
+        super().__init__(ndim, nwalkers, lnp, lnl, pargs=pargs, largs=largs)
+
+    def ratio(self, x):
+        ratios = numpy.zeros(x.shape[0], dtype=numpy.float64)
+        for i in range(x.shape[0]):
+            qfactor = 0
+            if self.ndim == 1:
+                diff = (self.w[i, :] - x[i, :])*self.qtra
+            else:
+                diff = (self.w[i, :] - x[i, :])@self.qtra.T
+            for j in range(self.ndim):
+                qfactor += (numpy.log(self.q(diff[j]))
+                            - numpy.log(self.q(-diff[j])))
+            ratios[i] = self.lnf(x[i, :]) - self.lnf(self.w[i, :]) + qfactor
+        return ratios
