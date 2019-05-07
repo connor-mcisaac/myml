@@ -12,6 +12,7 @@ class mymetropolis(object):
         self.pargs = pargs
         self.largs = largs
         self.w = numpy.random.randn(self.nwalkers, self.ndim)
+        self.set_q()
 
     def lnf(self, x):
         p = self.lnp(x, *self.pargs)
@@ -67,14 +68,20 @@ class mymetropolis(object):
 
     def step(self, n):
         chains = numpy.zeros((n, self.nwalkers, self.ndim), dtype=numpy.float64)
+        tried = numpy.zeros((self.nwalkers), dtype=numpy.int32)
+        passed = numpy.zeros((self.nwalkers), dtype=numpy.int32)
         for i in range(n):
             proposed = self.propose_step()
             Q = self.ratio(proposed)
             R = numpy.random.rand(self.nwalkers)
             for j in range(self.nwalkers):
+                tried[j] += 1
                 if Q[j] > numpy.log(R[j]):
+                    passed[j] += 1
                     self.w[j, :] = proposed[j, :]
             chains[i, :, :] += self.w
+        print('Run complete, acceptance fraction = {}'
+              .format(numpy.sum(passed)/numpy.sum(tried)))
         return numpy.reshape(chains, (n*self.nwalkers, self.ndim)), chains
 
 
