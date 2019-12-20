@@ -1,2 +1,2 @@
 # myml
-Attempt at coding an object oriented machine learning module
+Attempt at coding my own machine learning module for education purposes
