@@ -10,10 +10,15 @@ class EmptyTile(object):
 class GameBoard(object):
 
     def __init__(self, shape, name=None):
-        if not isinstance(shape, (list, tuple)):
-            raise TypeError('shape should be a list or tuple')
-        self.shape = shape
-        self.board = np.ones(shape, dtype=int) * -1
+        if isinstance(shape, (list, tuple)):
+            self.shape = shape
+            self.board = np.ones(shape, dtype=int) * -1
+        elif isinstance(shape, np.ndarray):
+            if  not issubclass(shape.dtype.type, np.integer):
+                raise TypeError('If an array if given for shape '
+                                'it must be integer type')
+            self.shape = shape.shape
+            self.board = board
         self.npieces = 0
         self.pieces = {}
         self.nplayers = 0
