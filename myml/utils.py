@@ -51,11 +51,10 @@ class mn(object):
         else:
             self.ic = numpy.linalg.inv(c)
             self.dc = numpy.linalg.det(c)
+        self.norm = numpy.sqrt((((2*numpy.pi)**self.dim)*self.dc))
 
     def __call__(self, x):
         if self.dim == 1:
-            return (numpy.exp(-0.5*(x-self.m)*self.ic*(x-self.m))
-                    /numpy.sqrt((((2*numpy.pi)**self.dim)*self.dc)))
+            return numpy.exp(-0.5*(x-self.m)*self.ic*(x-self.m))/self.norm
         else:
-            return (numpy.exp(-0.5*(x-self.m).T@self.ic@(x-self.m))
-                    /numpy.sqrt((((2*numpy.pi)**self.dim)*self.dc)))
+            return numpy.exp(-0.5*(x-self.m).T@self.ic@(x-self.m))/self.norm
