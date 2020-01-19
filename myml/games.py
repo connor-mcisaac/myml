@@ -2,92 +2,171 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-class EmptyTile(object):
-    def land_on(self, other):
-        return True
+class ParentError(Exception):
+    pass
 
 
-class GameBoard(object):
+class Game(object):
 
-    def __init__(self, shape, name=None):
-        if isinstance(shape, (list, tuple)):
-            self.shape = shape
-            self.board = np.ones(shape, dtype=int) * -1
-        elif isinstance(shape, np.ndarray):
-            if  not issubclass(shape.dtype.type, np.integer):
-                raise TypeError('If an array if given for shape '
-                                'it must be integer type')
-            self.shape = shape.shape
-            self.board = board
-        self.npieces = 0
-        self.pieces = {}
-        self.nplayers = 0
-        self.players = {}
-        self.name = name if name else 'Game'
-        self.empty = EmptyTile()
+    def __init__(self, name='Game'):
+        if not isinstance(name, str):
+            raise TypeError('"name" must be a string"')
+        self.name = name
+        self.board = None
+        self.players = []
+
+    def add_board(self, board):
+        board._set_game(self)
+        self.board = board
 
     def add_player(self, player):
-        self.players[self.nplayers] = player
-        self.nplayers += 1
-        return self.nplayers - 1
-
-    def check_pos(self, pos):
-        if not isinstance(pos, (list, tuple)):
-            raise TypeError('pos should be a list or tuple')
-        if all([0 <= p < s for p, s in zip(pos, self.shape)]):
-            return self.pieces.get(self.board[pos], self.empty)
-        else:
-            return False
-
-    def add_piece(self, piece, pos):
-        check = self.check_pos(pos)
-        if not check:
-            raise ValueError('This is not a valid position')
-        elif isinstance(check, EmptyTile):
-            self.board[pos] = self.npieces
-            self.pieces[self.npieces] = piece
-            self.npieces += 1
-            return self.npieces - 1
-        else:
-            raise ValueError('This position is occupied')
-
-    def move_piece(self, pos0, pos1):
-        piece = self.check_pos(pos0)
-        if isinstance(piece, EmptyTile):
-            raise ValueError('pos0 does not contain a piece')
-        elif piece.move_valid(pos1):
-            self.board[pos0] = -1
-            self.board[pos1] = piece.idx
-            piece.pos = pos1
-        else:
-            raise ValueError('Cannot move piece to pos1')
+        player._set_game(self)
+        self.players.append(player)
 
 
+class GameObject(object):
 
-class GamePlayer(object):
-
-    def __init__(self, board, name):
-        self.idx = board.add_player(self)
-        self.board = board
+    def __init__(self, name=''):
         if not isinstance(name, str):
             raise TypeError('name must be a string')
         self.name = name
+        self.game = None
+
+    def _set_game(self, game):
+        if self.game:
+            raise ParentError('This is already part of ' + self.game.name)
+        else:
+            self.game = game
 
 
-class GamePiece(object):
+class Player(GameObject):
 
-    def __init__(self, board, pos, player, name=None):
-        self.idx = board.add_piece(self, pos)
-        self.board = board
-        self.pos = pos
-        self.player = player
-        self.name = name if name else 'Piece'
+    def _set_game(self, game):
+        super()._set_game(game)
+        self.idx = len(game.players)
+        if not self.name:
+            self.name = 'Player {0}'.format(self.idx)
 
-    def land_on(self, other):
-        if other.player is self.player:
+
+class GameBoard(GameObject):
+
+    def __init__(self, shape, nteams, base=None, teams=None):
+        super().__init__()
+
+        if not isinstance(shape, (list, tuple)):
+            raise TypeError('"shape" must be a list/tuple')
+        if not isinstance(nteams, int):
+            raise TypeError('"nteams" must be an int')
+
+        self.shape = shape
+        self.board = np.zeros(shape, dtype=int)
+        if isinstance(base, Tile):
+            self.objects = [base]
+        elif base is None:
+            self.objects = [Tile()]
+        else:
+            raise TypeError('"base" must be a Tile type')
+
+        if teams is None:
+            self.teams = ['Team ' + str(i+1) for i in range(nteams)]
+        elif not isinstance(names, (list, tuple)):
+            raise TypeError('"teams" must be a list/tuple')
+        elif nteams != len(teams) or nteams != len(set(teams)):
+            raise ValueError('length of "teams" must be nteams and all items'
+                             ' must be unique')
+        else:
+            self.teams = list(teams)
+        self.pieces = {t:[] for t in self.teams}
+
+    def _set_game(self, game):
+        super()._set_game(game)
+        self.name = game.name
+
+    def _add_object(self, obj):
+        obj._set_board(self)
+        self.objects.append(obj)
+
+    def check_pos(self, pos):
+        if not isinstance(pos, (list, tuple)):
+            raise TypeError('"pos" should be a list/tuple')
+        elif len(pos) != len(self.shape):
+            raise ValueError('"pos" must have length ' + str(len(self.shape)))
+        elif all([0 <= p < s for p, s in zip(pos, self.shape)]):
+            idx = self.board[pos]
+            return self.objects[idx]
+        else:
+            return False
+
+    def add_piece(self, piece, team, pos=None):
+        self._add_object(piece)
+
+        if isinstance(team, int):
+            piece._set_team(self.teams[team])
+        elif isinstance(team, str) and team in self.teams:
+            piece._set_team(team)
+        else:
+            raise TypeError('"team" must be the integer representing the team'
+                            ' or the name of the team')
+
+        if not pos is None:
+            piece._set_pos(pos)
+            self.board[pos] = piece.idx
+
+
+class GameAtom(object):
+
+    def __init__(self, name='Piece'):
+        if not isinstance(name, str):
+            raise TypeError('"name" must be a string"')
+        self.name = name
+        self.board = None
+        self.idx = None
+        self.team = None
+        self.pos = None
+
+    def _set_board(self, board):
+        if self.board:
+            raise ParentError('This is already part of ' + self.board.name)
+        else:
+            self.board = board
+            self.idx = len(board.objects)
+
+    def _set_team(self, team):
+        if self.team:
+            raise ParentError('This is already part of ' + self.team)
+        else:
+            self.team = team
+
+    def _set_pos(self, pos):
+        check = self.board.check_pos(pos)
+        if check and check.set_on(self):
+            self.pos = pos
+        elif not check:
+            raise ValueError('This position is outwith the board')
+        else:
+            raise ValueError('This position is already in use')
+
+    def land_on(self, piece):
+        return True
+
+    def set_on(self, piece):
+        return True
+
+
+class Tile(GameAtom):
+    pass
+
+
+class Piece(GameAtom):
+
+    def land_on(self, piece):
+        if piece.player == self.player:
             return False
         else:
             return True
+
+    def set_on(self, piece):
+        return False
 
     def move_valid(self, target):
         check = self.board.check_pos(target)
