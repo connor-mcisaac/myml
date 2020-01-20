@@ -6,6 +6,10 @@ class ParentError(Exception):
     pass
 
 
+class PositionError(Exception):
+    pass
+
+
 class Game(object):
 
     def __init__(self, name='Game'):
@@ -116,19 +120,19 @@ class GameBoard(GameObject):
     def _move_piece(self, p0, p1):
         piece = self.check_pos(p0)
         if not isinstance(piece, Piece):
-            raise TypeError('Only pieces can be moved')
+            raise PositionError('Only pieces can be moved')
         move = piece._move_valid(p1)
         if move:
             self.board[p0] = piece.on.idx
             self.board[p1] = piece.idx
             piece._update_pos(p1, move)
         else:
-            raise ValueError('Piece cannot be moved to this position')
+            raise PositionError('Piece cannot be moved to this position')
 
 
 class GameAtom(object):
 
-    def __init__(self, name='Piece'):
+    def __init__(self, name='Atom'):
         if not isinstance(name, str):
             raise TypeError('"name" must be a string"')
         self.name = name
@@ -159,15 +163,6 @@ class GameAtom(object):
         else:
             raise ValueError('This position is already in use')
 
-    def _update_pos(self, pos, land_on):
-        self.pos = pos
-        if isinstance(land_on, Tile):
-            self.on = land_on
-        elif isinstance(land_on, Piece):
-            self.on = land_on.on
-
-
-
     def land_on(self, piece):
         return True
 
@@ -180,6 +175,14 @@ class Tile(GameAtom):
 
 
 class Piece(GameAtom):
+
+    def __init__(self, name='Piece'):
+        super().__init__(name=name)
+        self.alive = True
+
+    def _set_team(self, team):
+        super().__init__(team)
+        self.board.pieces[self.team].append(self)
 
     def _set_pos(self, pos):
         super()._set_pos(pos)
@@ -200,3 +203,11 @@ class Piece(GameAtom):
             return check.land_on(self)
         else:
             return False
+
+    def _update_pos(self, pos, land_on):
+        self.pos = pos
+        if isinstance(land_on, Tile):
+            self.on = land_on
+        elif isinstance(land_on, Piece):
+            self.on = land_on.on
+            land_on.alive = False
