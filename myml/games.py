@@ -58,18 +58,19 @@ class GameBoard(GameObject):
         if not isinstance(nteams, int):
             raise TypeError('"nteams" must be an int')
 
+        self.objects = []
         self.shape = shape
         self.board = np.zeros(shape, dtype=int)
         if isinstance(base, Tile):
-            self.objects = [base]
+            self._add_object(base)
         elif base is None:
-            self.objects = [Tile()]
+            self._add_object(Tile())
         else:
             raise TypeError('"base" must be a Tile type')
 
         if teams is None:
             self.teams = ['Team ' + str(i+1) for i in range(nteams)]
-        elif not isinstance(names, (list, tuple)):
+        elif not isinstance(teams, (list, tuple)):
             raise TypeError('"teams" must be a list/tuple')
         elif nteams != len(teams) or nteams != len(set(teams)):
             raise ValueError('length of "teams" must be nteams and all items'
@@ -112,6 +113,18 @@ class GameBoard(GameObject):
             piece._set_pos(pos)
             self.board[pos] = piece.idx
 
+    def _move_piece(self, p0, p1):
+        piece = self.check_pos(p0)
+        if not isinstance(piece, Piece):
+            raise TypeError('Only pieces can be moved')
+        move = piece._move_valid(p1)
+        if move:
+            self.board[p0] = piece.on.idx
+            self.board[p1] = piece.idx
+            piece._update_pos(p1, move)
+        else:
+            raise ValueError('Piece cannot be moved to this position')
+
 
 class GameAtom(object):
 
@@ -146,6 +159,15 @@ class GameAtom(object):
         else:
             raise ValueError('This position is already in use')
 
+    def _update_pos(self, pos, land_on):
+        self.pos = pos
+        if isinstance(land_on, Tile):
+            self.on = land_on
+        elif isinstance(land_on, Piece):
+            self.on = land_on.on
+
+
+
     def land_on(self, piece):
         return True
 
@@ -159,8 +181,12 @@ class Tile(GameAtom):
 
 class Piece(GameAtom):
 
+    def _set_pos(self, pos):
+        super()._set_pos(pos)
+        self.on = self.board.check_pos(pos)
+
     def land_on(self, piece):
-        if piece.player == self.player:
+        if piece.team == self.team:
             return False
         else:
             return True
@@ -168,7 +194,7 @@ class Piece(GameAtom):
     def set_on(self, piece):
         return False
 
-    def move_valid(self, target):
+    def _move_valid(self, target):
         check = self.board.check_pos(target)
         if check:
             return check.land_on(self)
