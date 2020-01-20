@@ -181,7 +181,7 @@ class Piece(GameAtom):
         self.alive = True
 
     def _set_team(self, team):
-        super().__init__(team)
+        super()._set_team(team)
         self.board.pieces[self.team].append(self)
 
     def _set_pos(self, pos):
