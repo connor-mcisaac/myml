@@ -181,6 +181,12 @@ class BoardObject(object):
     def _set_pos(self, pos):
         pass
 
+    def _save_state(self):
+        return {}
+
+    def _reset_state(self, state):
+        pass
+
     def _can_land_on(self, piece):
         return True
 
@@ -211,6 +217,7 @@ class Piece(BoardObject):
 
     def __init__(self, name='Piece'):
         super().__init__(name=name)
+        self.on = False
         self.alive = True
 
     def _set_team(self, team):
@@ -232,6 +239,14 @@ class Piece(BoardObject):
         else:
             raise ValueError('This position is already in use')
         self.on = check
+
+    def _save_state(self):
+        return {'on': self.on,
+                'alive': self.alive}
+
+    def _reset_state(self, state):
+        for k, v in state.items():
+            setattr(self, k, v)
 
     def _can_land_on(self, piece):
         if piece.team == self.team:
