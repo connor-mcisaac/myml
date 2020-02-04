@@ -95,9 +95,9 @@ class GameBoard(GameObject):
             raise TypeError('"pos" should be a list/tuple/array')
         elif len(pos) != len(self.shape):
             raise ValueError('"pos" must have length ' + str(len(self.shape)))
+        return tuple(pos)
 
-    def check_pos(self, pos):
-        self._validate_pos(pos)
+    def _check_pos(self, pos):
         if all([0 <= p < s for p, s in zip(pos, self.shape)]):
             idx = self.board[pos]
             return self.objects[idx]
@@ -105,6 +105,8 @@ class GameBoard(GameObject):
             return False
 
     def add_tile(self, tile, pos, team=None):
+        pos = self._validate_pos(pos)
+
         if tile not in self.objects:
             self._add_object(tile)
 
@@ -112,12 +114,12 @@ class GameBoard(GameObject):
         self.board[pos] = tile.idx
 
         if isinstance(team, int):
-            piece._set_team(self.teams[team])
-        elif team in self.teams or team is None:
-            piece._set_team(team)
+            tile._set_team(self.teams[team])
+        elif team in self.teams:
+            tile._set_team(team)
 
     def add_tiles(self, tile, pos, team=None):
-        if not isinstance(pos, (list, tuple np.ndarray)):
+        if not isinstance(pos, (list, tuple, np.ndarray)):
             raise TypeError('"pos" should be a list/tuple/array')
 
         pos = np.array(pos)
@@ -126,10 +128,16 @@ class GameBoard(GameObject):
                              'with length = ndim, or an array of shape '
                              '(npositions, ndim)')
 
+        if isinstance(team, int):
+            tile._set_team(self.teams[team])
+        elif team in self.teams:
+            tile._set_team(team)
+
         for i in range(pos.shape[0]):
-            self.add_tile(tile, pos[i, :], team=team)
+            self.add_tile(tile, pos[i, :])
 
     def add_piece(self, piece, pos, team):
+        pos = self._validate_pos(pos)
         self._add_object(piece)
 
         piece._set_pos(pos)
@@ -143,17 +151,32 @@ class GameBoard(GameObject):
             raise TypeError('"team" must be the integer representing the team'
                             ' or the name of the team')
 
-    def _move_piece(self, p0, p1):
-        piece = self.check_pos(p0)
+    def move_piece(self, p0, p1):
+        p0 = self._validate_pos(p0)
+        p1 = self._validate_pos(p1)
+        piece = self._check_pos(p0)
         if not isinstance(piece, Piece):
             raise PositionError('Only pieces can be moved')
         move = piece._move_valid(p1)
         if move:
+            piece._update_pos(p1)
             self.board[p0] = piece.on.idx
             self.board[p1] = piece.idx
-            piece._update_pos(p1, move)
         else:
             raise PositionError('Piece cannot be moved to this position')
+
+    def _save_state(self):
+        return {'board': self.board.copy(),
+                'objects': self.objects.copy(),
+                'states': [ob._save_state() for ob in self.objects]}
+
+    def _reset_state(self, state):
+        for k, v in state.items():
+            if k != 'states':
+                setattr(self, k, v)
+        if 'states' in state.keys():
+            for ob, ob_state in zip(self.objects, state['states']):
+                ob._reset_state(ob_state)
 
 
 class BoardObject(object):
@@ -179,13 +202,16 @@ class BoardObject(object):
             raise ValueError('This object cannot be given a team')
 
     def _set_pos(self, pos):
-        pass
+        check = self.board._check_pos(pos)
+        if not check:
+            raise ValueError('This position is outwith the board')
 
     def _save_state(self):
         return {}
 
     def _reset_state(self, state):
-        pass
+        for k, v in state.items():
+            setattr(self, k, v)
 
     def _can_land_on(self, piece):
         return True
@@ -204,7 +230,7 @@ class Tile(BoardObject):
     pass
 
 
-class TeamTile(BoardObject):
+class TeamTile(Tile):
 
     def _set_team(self, team):
         if self.team:
@@ -230,10 +256,10 @@ class Piece(BoardObject):
     def _set_pos(self, pos):
         if self.pos:
             raise PositionError("This piece's position has already been set")
-        check = self.board.check_pos(pos)
+        check = self.board._check_pos(pos)
         if check and check._can_set_on(self):
-            self.pos = pos
-            check.set_on(self)
+            self.pos = tuple(pos)
+            check._set_on(self)
         elif not check:
             raise ValueError('This position is outwith the board')
         else:
@@ -241,12 +267,9 @@ class Piece(BoardObject):
         self.on = check
 
     def _save_state(self):
-        return {'on': self.on,
+        return {'pos': self.pos,
+                'on': self.on,
                 'alive': self.alive}
-
-    def _reset_state(self, state):
-        for k, v in state.items():
-            setattr(self, k, v)
 
     def _can_land_on(self, piece):
         if piece.team == self.team:
@@ -261,16 +284,17 @@ class Piece(BoardObject):
         self.alive = False
 
     def _move_valid(self, target):
-        check = self.board.check_pos(target)
+        check = self.board._check_pos(target)
         if check:
             return check._can_land_on(self)
         else:
             return False
 
-    def _update_pos(self, pos, in_pos):
-        self.pos = pos
+    def _update_pos(self, pos):
+        in_pos = self.board._check_pos(pos)
         if isinstance(in_pos, Tile):
             self.on = in_pos
         elif isinstance(in_pos, Piece):
             self.on = in_pos.on
         in_pos._land_on(self)
+        self.pos = pos
