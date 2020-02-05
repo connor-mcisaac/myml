@@ -13,6 +13,10 @@ class TeamError(Exception):
     pass
 
 
+class StateError(Exception):
+    pass
+
+
 class Game(object):
 
     def __init__(self, name='Game'):
@@ -87,6 +91,8 @@ class GameBoard(GameObject):
             self.teams = list(teams)
         self.pieces = {t:[] for t in self.teams}
         self.turn = 0
+        self.state = None
+        self.pos_states = {}
 
     def _set_game(self, game):
         super()._set_game(game)
@@ -103,6 +109,18 @@ class GameBoard(GameObject):
             raise ValueError('"pos" must have length ' + str(len(self.shape)))
         return tuple(pos)
 
+    def _within_board(self, pos):
+        return all([0 <= p < s for p, s in zip(pos, self.shape)])
+
+    def _get_object(self, pos):
+        return self.objects[self.board[pos]]
+
+    def _check_pos(self, pos):
+        if self._within_board(pos):
+            return self._get_object(pos)
+        else:
+            return False
+
     def _validate_team(self, team):
         if isinstance(team, int):
             return self.teams[team]
@@ -114,22 +132,16 @@ class GameBoard(GameObject):
             raise TypeError('"team" must be the integer representing the team'
                             ' or the name of the team')
 
-    def _check_pos(self, pos):
-        if all([0 <= p < s for p, s in zip(pos, self.shape)]):
-            idx = self.board[pos]
-            return self.objects[idx]
-        else:
-            return False
-
     def add_tile(self, tile, pos, team=None):
         pos = self._validate_pos(pos)
+        if not self._within_board(pos):
+            raise PositionError("Can't add a tile outwith board")
         team = self._validate_team(team)
 
         if tile not in self.objects:
             self._add_object(tile)
-
-        tile._set_pos(pos)
-        tile._set_team(team)
+            tile._set_pos(pos)
+            tile._set_team(team)
 
         self.board[pos] = tile.idx
 
@@ -143,16 +155,13 @@ class GameBoard(GameObject):
                              'with length = ndim, or an array of shape '
                              '(npositions, ndim)')
 
-        if isinstance(team, int):
-            tile._set_team(self.teams[team])
-        elif team in self.teams:
-            tile._set_team(team)
-
         for i in range(pos.shape[0]):
-            self.add_tile(tile, pos[i, :])
+            self.add_tile(tile, pos[i, :], team=team)
 
     def add_piece(self, piece, pos, team):
         pos = self._validate_pos(pos)
+        if not self._within_board(pos):
+            raise PositionError("Can't add a piece outwith board")
         team = self._validate_team(team)
 
         self._add_object(piece)
@@ -163,77 +172,97 @@ class GameBoard(GameObject):
         piece._set_team(team)
         self.board[pos] = piece.idx
 
+    def _move_piece(self, p0, p1):
+        piece = self._get_object(p0)
+        on = piece.on.idx
+        piece._update_pos(p1)
+        self.board[p0] = on
+        self.board[p1] = piece.idx
+
     def move_piece(self, p0, p1):
         p0 = self._validate_pos(p0)
         p1 = self._validate_pos(p1)
+        if not self._within_board(p0) or not self._within_board(p1):
+            raise PositionError("p0 and p1 must be within board")
         team = self.teams[self.turn % self.nteams]
-        piece = self._check_pos(p0)
+        piece = self._get_object(p0)
         if not isinstance(piece, Piece):
             raise PositionError('Only pieces can be moved')
         elif team != piece.team:
             raise TeamError("This piece doesn't belong to " + team)
         move = piece._move_valid(p1)
         if move:
-            on = piece.on.idx
-            piece._update_pos(p1)
-            self.board[p0] = on
-            self.board[p1] = piece.idx
+            self._move_piece(p0, p1)
         else:
             raise PositionError('Piece cannot be moved to this position')
         self.turn += 1
 
     def _save_state(self):
-        return {'turn': self.turn,
-                'board': self.board.copy(),
-                'objects': self.objects.copy()}
+        self.state =  {'turn': self.turn,
+                       'board': self.board.copy(),
+                       'objects': self.objects.copy()}
+        for ob in self.objects:
+            ob._save_state()
 
-    def _save_full_state(self):
-        state = self._save_state()
-        state['states'] = [ob._save_state() for ob in self.objects]
-        return state
-
-    def _reset_state(self, state):
-        for k, v in state.items():
+    def _reset_state(self):
+        if self.state is None:
+            raise StateError('No state has been saved for this object')
+        for k, v in self.state.items():
             if k != 'states':
                 setattr(self, k, v)
-        if 'states' in state.keys():
-            for ob, ob_state in zip(self.objects, state['states']):
-                ob._reset_state(ob_state)
+        for ob in self.objects:
+            ob._reset_state()
+
+    def _save_pos(self, pos):
+        top = self._get_object(pos)
+        if isinstance(top, Piece):
+            top._save_state()
+            top.on._save_state()
+            self.pos_states[pos] = (top.on, top)
+        else:
+            top._save_state()
+            self.pos_states[pos] = (top,)
+
+    def _reset_pos(self, pos):
+        if pos not in self.pos_states.keys():
+            raise StateError('No state has been saved for this position')
+        for ob in self.pos_states[pos]:
+            ob._reset_state()
+            self.board[pos] = ob.idx
 
     def _check_board_state(self):
         return True
 
     def _try_move(self, p0, p1):
-        state = self._save_full_state()
-        try:
-            self.move_piece(p0, p1)
-        except TeamError:
-            return False
+        self._save_pos(p0)
+        self._save_pos(p1)
+
+        self._move_piece(p0, p1)
         allowed = self._check_board_state()
-        self._reset_state(state)
+
+        self._reset_pos(p0)
+        self._reset_pos(p1)
         return allowed
 
-    def _list_piece_moves(self, piece):
+    def _list_piece_moves(self, piece, check_board=True):
         if isinstance(piece, int):
             piece = self.objects[piece]
         moves = []
         for m in piece._list_moves():
-            if self._try_move(piece.pos, m):
+            if not check_board or self._try_move(piece.pos, m):
                 moves.append((piece.pos, m))
         return moves
 
     def _list_pos_moves(self, pos):
         pos = self._validate_pos(pos)
-        check = self._check_pos(pos)
+        check = self.board[pos]
         return self._list_piece_moves(check)
 
-    def _list_moves(self):
+    def _list_moves(self, check_board=True):
         team = self.teams[self.turn % self.nteams]
         moves = []
         for piece in self.pieces[team]:
-            for m in piece._list_moves():
-                if self._try_move(piece.pos, m):
-                    moves.append((piece.pos, m))
+            moves += self._list_piece_moves(piece, check_board=check_board)
         return moves
 
 
@@ -247,6 +276,7 @@ class BoardObject(object):
         self.idx = None
         self.team = None
         self.pos = None
+        self.state = None
 
     def _set_board(self, board):
         if self.board:
@@ -260,15 +290,15 @@ class BoardObject(object):
             raise ValueError('This object cannot be given a team')
 
     def _set_pos(self, pos):
-        check = self.board._check_pos(pos)
-        if not check:
-            raise PositionError('This position is outwith the board')
+        pass
 
     def _save_state(self):
-        return {}
+        self.state = {}
 
-    def _reset_state(self, state):
-        for k, v in state.items():
+    def _reset_state(self):
+        if self.state is None:
+            raise StateError('No state has been saved for this object')
+        for k, v in self.state.items():
             setattr(self, k, v)
 
     def _can_land_on(self, piece):
@@ -317,20 +347,18 @@ class Piece(BoardObject):
     def _set_pos(self, pos):
         if self.pos:
             raise PositionError("This piece's position has already been set")
-        check = self.board._check_pos(pos)
-        if check and check._can_set_on(self):
+        check = self.board._get_object(pos)
+        if check._can_set_on(self):
             self.pos = tuple(pos)
             check._set_on(self)
-        elif not check:
-            raise PositionError('This position is outwith the board')
         else:
             raise PositionError('This position is already in use')
         self.on = check
 
     def _save_state(self):
-        return {'pos': self.pos,
-                'on': self.on,
-                'alive': self.alive}
+        self.state =  {'pos': self.pos,
+                       'on': self.on,
+                       'alive': self.alive}
 
     def _can_land_on(self, piece):
         if piece.team == self.team:
@@ -345,14 +373,11 @@ class Piece(BoardObject):
         self.alive = False
 
     def _move_valid(self, target):
-        check = self.board._check_pos(target)
-        if check:
-            return check._can_land_on(self)
-        else:
-            return False
+        check = self.board._get_object(target)
+        return check._can_land_on(self)
 
     def _update_pos(self, pos):
-        in_pos = self.board._check_pos(pos)
+        in_pos = self.board._get_object(pos)
         if isinstance(in_pos, Tile):
             self.on = in_pos
         elif isinstance(in_pos, Piece):
