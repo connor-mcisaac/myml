@@ -185,8 +185,12 @@ class GameBoard(GameObject):
     def _save_state(self):
         return {'turn': self.turn,
                 'board': self.board.copy(),
-                'objects': self.objects.copy(),
-                'states': [ob._save_state() for ob in self.objects]}
+                'objects': self.objects.copy()}
+
+    def _save_full_state(self):
+        state = self._save_state()
+        state['states'] = [ob._save_state() for ob in self.objects]
+        return state
 
     def _reset_state(self, state):
         for k, v in state.items():
@@ -200,7 +204,7 @@ class GameBoard(GameObject):
         return True
 
     def _try_move(self, p0, p1):
-        state = self._save_state()
+        state = self._save_full_state()
         try:
             self.move_piece(p0, p1)
         except TeamError:
