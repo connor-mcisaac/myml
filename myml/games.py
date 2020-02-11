@@ -25,14 +25,37 @@ class Game(object):
         self.name = name
         self.board = None
         self.players = []
+        self.t2p = {}
 
     def add_board(self, board):
         board._set_game(self)
         self.board = board
 
-    def add_player(self, player):
+    def add_player(self, player, team=None):
+        if self.board is None:
+            raise ParentError('You must add a board before adding players')
         player._set_game(self)
+        if len(self.t2p.keys()) >= self.board.nteams:
+            raise TeamError('All teams have already been taken by players')
+        elif team is None:
+            team = [t in self.board.teams if t not in self.t2p.keys()][:1]
+        elif not isinstance(team, list):
+            team = [team]
+        for t in team:
+            t = self.board._validate_team(t)
+            if t in self.t2p.keys():
+                raise TeamError('{0} already has a player to control it')
+            else:
+                self.t2p[t] = player
         self.players.append(player)
+
+    def _play_turn(self):
+        turn = self.board.turn
+        player = self.t2p[self._whose_turn()]
+        while self.board.turn == turn:
+            m0, m1 = player._get_move()
+            if self.board.try_move(m0, m1):
+                self.board.move_piece(m0, m1)
 
 
 class GameObject(object):
@@ -57,6 +80,11 @@ class Player(GameObject):
         self.idx = len(game.players)
         if not self.name:
             self.name = 'Player {0}'.format(self.idx + 1)
+
+
+class ConsolePlayer(Player):
+
+
 
 
 class GameBoard(GameObject):
@@ -98,8 +126,12 @@ class GameBoard(GameObject):
         super()._set_game(game)
         self.name = game.name
 
-    def _add_object(self, obj):
+    def _add_object(self, obj, pos=None, team=None):
         obj._set_board(self)
+        tile._set_pos(pos)
+        tile._set_team(team)
+        if pos:
+            self.board[pos] = tile.idx
         self.objects.append(obj)
 
     def _validate_pos(self, pos):
@@ -139,11 +171,9 @@ class GameBoard(GameObject):
         team = self._validate_team(team)
 
         if tile not in self.objects:
-            self._add_object(tile)
-            tile._set_pos(pos)
-            tile._set_team(team)
-
-        self.board[pos] = tile.idx
+            self._add_object(tile, pos=pos, team=team)
+        else:
+            self.board[pos] = tile.idx
 
     def add_tiles(self, tile, pos, team=None):
         if not isinstance(pos, (list, tuple, np.ndarray)):
@@ -164,13 +194,7 @@ class GameBoard(GameObject):
             raise PositionError("Can't add a piece outwith board")
         team = self._validate_team(team)
 
-        self._add_object(piece)
-        try:
-            piece._set_pos(pos)
-        except PositionError:
-            del self.objects[-1]
-        piece._set_team(team)
-        self.board[pos] = piece.idx
+        self._add_object(piece, pos=pos, team=team)
 
     def _move_piece(self, p0, p1):
         piece = self._get_object(p0)
@@ -179,12 +203,15 @@ class GameBoard(GameObject):
         self.board[p0] = on
         self.board[p1] = piece.idx
 
-    def move_piece(self, p0, p1):
+    def _whose_turn(self):
+        return self.teams[self.turn % self.nteams]
+
+    def make_move(self, p0, p1):
         p0 = self._validate_pos(p0)
         p1 = self._validate_pos(p1)
         if not self._within_board(p0) or not self._within_board(p1):
             raise PositionError("p0 and p1 must be within board")
-        team = self.teams[self.turn % self.nteams]
+        team = self._whose_turn()
         piece = self._get_object(p0)
         if not isinstance(piece, Piece):
             raise PositionError('Only pieces can be moved')
@@ -238,11 +265,31 @@ class GameBoard(GameObject):
         self._save_pos(p1)
 
         self._move_piece(p0, p1)
+        self.turn += 1
+
         allowed = self._check_board_state()
 
+        self.turn -= 1
         self._reset_pos(p0)
         self._reset_pos(p1)
         return allowed
+
+    def try_move(self, p0, p1):
+        p0 = self._validate_pos(p0)
+        p1 = self._validate_pos(p1)
+        if not self._within_board(p0) or not self._within_board(p1):
+            raise PositionError("p0 and p1 must be within board")
+        team = self._whose_turn()
+        piece = self._get_object(p0)
+        if not isinstance(piece, Piece):
+            raise PositionError('Only pieces can be moved')
+        elif team != piece.team:
+            raise TeamError("This piece doesn't belong to " + team)
+        move = piece._move_valid(p1)
+        if not move:
+            raise PositionError('Piece cannot be moved to this position')
+        return self._try_move(p0, p1)
+
 
     def _list_piece_moves(self, piece, check_board=True):
         if isinstance(piece, int):
@@ -277,6 +324,9 @@ class BoardObject(object):
         self.team = None
         self.pos = None
         self.state = None
+
+    def __repr__(self):
+        return ' '
 
     def _set_board(self, board):
         if self.board:
@@ -329,6 +379,9 @@ class TeamTile(Tile):
         else:
             self.team = team
 
+    def __repr__(self):
+        return 't{0}'.format(self.board.teams.index(self.team))
+
 
 class Piece(BoardObject):
 
@@ -343,6 +396,9 @@ class Piece(BoardObject):
         else:
             self.team = team
         self.board.pieces[self.team].append(self)
+
+    def __repr__(self):
+        return 't{0}'.format(self.board.teams.index(self.team))
 
     def _set_pos(self, pos):
         if self.pos:
