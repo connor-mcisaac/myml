@@ -38,7 +38,7 @@ class Game(object):
         if len(self.t2p.keys()) >= self.board.nteams:
             raise TeamError('All teams have already been taken by players')
         elif team is None:
-            team = [t in self.board.teams if t not in self.t2p.keys()][:1]
+            team = [t for t in self.board.teams if t not in self.t2p.keys()][:1]
         elif not isinstance(team, list):
             team = [team]
         for t in team:
@@ -82,11 +82,6 @@ class Player(GameObject):
             self.name = 'Player {0}'.format(self.idx + 1)
 
 
-class ConsolePlayer(Player):
-
-
-
-
 class GameBoard(GameObject):
 
     def __init__(self, shape, nteams, base=None, teams=None):
@@ -128,10 +123,10 @@ class GameBoard(GameObject):
 
     def _add_object(self, obj, pos=None, team=None):
         obj._set_board(self)
-        tile._set_pos(pos)
-        tile._set_team(team)
+        obj._set_pos(pos)
+        obj._set_team(team)
         if pos:
-            self.board[pos] = tile.idx
+            self.board[pos] = obj.idx
         self.objects.append(obj)
 
     def _validate_pos(self, pos):
