@@ -1,5 +1,5 @@
 import numpy
-from myml.utils import create_diag2D, draw1D, mn
+from myml.utils import create_diag2D, Draw1D, MultiNormal
 
 
 class Metropolis(object):
@@ -40,11 +40,12 @@ class Metropolis(object):
         else:
             self.qtra = numpy.linalg.cholesky(self.qcov)
         if q is None:
-            self.q = mn(numpy.zeros((self.ndim)), create_diag2D(self.ndim))
+            self.q = MultiNormal(numpy.zeros((self.ndim)),
+                                 create_diag2D(self.ndim))
             self.qdraw = numpy.random.randn
         elif callable(q):
             self.q = q
-            self.qdraw = draw1D(q, lower, upper)
+            self.qdraw = Draw1D(q, lower, upper)
 
     def draw_q(self, n):
         draws = numpy.zeros((n, self.ndim))
