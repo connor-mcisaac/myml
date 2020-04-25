@@ -1,5 +1,5 @@
 import numpy
-from .utils import create_diag2D, draw1D, mn
+from myml.utils import create_diag2D, draw1D, mn
 
 
 class mymetropolis(object):

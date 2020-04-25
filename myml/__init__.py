@@ -1,2 +1,3 @@
 from .network import *
-from .mcmc import *
+from .sampling import *
+from .utils import *
