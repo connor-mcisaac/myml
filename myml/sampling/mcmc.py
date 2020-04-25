@@ -2,7 +2,7 @@ import numpy
 from myml.utils import create_diag2D, draw1D, mn
 
 
-class mymetropolis(object):
+class Metropolis(object):
 
     def __init__(self, ndim, nwalkers, lnp, lnl, pargs=[], largs=[]):
         self.ndim = ndim
@@ -85,7 +85,7 @@ class mymetropolis(object):
         return numpy.reshape(chains, (n*self.nwalkers, self.ndim)), chains
 
 
-class mymh(mymetropolis):
+class MetropolisHastings(Metropolis):
 
     def __init__(self, ndim, nwalkers, lnp, lnl, pargs=[], largs=[]):
         super().__init__(ndim, nwalkers, lnp, lnl, pargs=pargs, largs=largs)

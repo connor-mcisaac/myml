@@ -17,7 +17,7 @@ def create_diag2D(n):
     return d
 
 
-class draw1D(object):
+class Draw1D(object):
 
     def __init__(self, function, lower, upper, args=None):
         xs = numpy.linspace(lower, upper, num=1000, endpoint=True)
@@ -39,7 +39,7 @@ class draw1D(object):
         return draws
 
 
-class mn(object):
+class MultiNormal(object):
 
     def __init__(self, m, c):
         self.dim = numpy.size(m)
