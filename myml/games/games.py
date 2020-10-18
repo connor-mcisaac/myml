@@ -1,4 +1,33 @@
 import numpy as np
+import re
+
+
+_letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+
+def _number_to_letters(x):
+    n = 1
+    num = 0
+    while x >= len(_letters) ** n + num:
+        num += len(_letters) ** n
+        n += 1
+    x -= num
+    letters = ''
+    for i in range(n, 0, -1):
+        num = x // len(_letters) ** (i - 1)
+        letters += _letters[num]
+        x = x % len(_letters) ** (i - 1)
+    return letters
+
+def _letters_to_number(letters):
+    letters = letters.upper()
+    x = 0
+    for i in range(1, len(letters)):
+        x += len(_letters) ** i
+    for i in range(len(letters)):
+        x += (_letters.index(letters[i])
+              * len(_letters) ** (len(letters) - i - 1))
+    return x
 
 
 class ParentError(Exception):
@@ -51,11 +80,19 @@ class Game(object):
 
     def _play_turn(self):
         turn = self.board.turn
-        player = self.t2p[self._whose_turn()]
+        player = self.t2p[self.board._whose_turn()]
+        print("It is {0}'s turn".format(player))
         while self.board.turn == turn:
             m0, m1 = player._get_move()
-            if self.board.try_move(m0, m1):
-                self.board.move_piece(m0, m1)
+            try:
+                possible = self.board.try_move(m0, m1)
+            except Exception as e:
+                possible = False
+                print(e)
+            if possible:
+                self.board.make_move(m0, m1)
+            else:
+                print('This move is not possible, try again.')
 
 
 class GameObject(object):
@@ -81,6 +118,23 @@ class Player(GameObject):
         if not self.name:
             self.name = 'Player {0}'.format(self.idx + 1)
 
+    def _str_to_pos(self, pos):
+        match = re.fullmatch(r'(?P<l>[a-z]+)(?P<n>[0-9]+)', pos, re.I)
+        if match is None:
+            match = re.fullmatch(r'(?P<n>[0-9]+)(?P<l>[a-z]+)', pos, re.I)
+        if match is None or len(match.groups()) != 2:
+            raise PositionError('The position should be formatted A1 or 1A')
+        pos = (int(match.group('n')),
+               int(_letters_to_number(match.group('l'))))
+        return pos
+
+    def _get_move(self):
+        print(self.game.board)
+        m0 = input('Select the piece to be moved:')
+        m0 = self._str_to_pos(m0)
+        m1 = input('Move piece to:')
+        m1 = self._str_to_pos(m1)
+        return m0, m1
 
 class GameBoard(GameObject):
 
@@ -93,7 +147,7 @@ class GameBoard(GameObject):
             raise TypeError('"nteams" must be an int')
 
         self.objects = []
-        self.shape = shape
+        self.shape = tuple(shape)
         self.board = np.zeros(shape, dtype=int)
         if isinstance(base, Tile):
             self._add_object(base)
@@ -117,6 +171,25 @@ class GameBoard(GameObject):
         self.state = None
         self.pos_states = {}
 
+    def __repr__(self):
+        letters = len(_number_to_letters(self.shape[1]))
+        pieces = np.max([len(str(b)) for b in self.objects])
+        letters = max(letters, pieces)
+        numbers = len(str(self.shape[0]))
+        rep = ' ' * numbers + '  '
+        for i in range(self.shape[1]):
+            rep += ' {0}  '.format(_number_to_letters(i).ljust(letters))
+        line = ' ' * (numbers + 2)
+        line += '_' * (len(rep) - len(line))
+        rep += '\n' + line + '\n'
+        for i in range(self.shape[0]):
+            rep += '{0} |'.format(str(i).ljust(numbers))
+            for j in range(self.shape[1]):
+                piece = str(self.objects[self.board[i, j]])
+                rep += ' {0} |'.format(piece.ljust(letters))
+            rep += '\n' + line + '\n'
+        return rep
+
     def _set_game(self, game):
         super()._set_game(game)
         self.name = game.name
@@ -125,6 +198,7 @@ class GameBoard(GameObject):
         obj._set_board(self)
         obj._set_pos(pos)
         obj._set_team(team)
+        obj.idx = len(self.objects)
         if pos:
             self.board[pos] = obj.idx
         self.objects.append(obj)
@@ -190,6 +264,7 @@ class GameBoard(GameObject):
         team = self._validate_team(team)
 
         self._add_object(piece, pos=pos, team=team)
+        self.pieces[team].append(piece)
 
     def _move_piece(self, p0, p1):
         piece = self._get_object(p0)
@@ -212,8 +287,8 @@ class GameBoard(GameObject):
             raise PositionError('Only pieces can be moved')
         elif team != piece.team:
             raise TeamError("This piece doesn't belong to " + team)
-        move = piece._move_valid(p1)
-        if move:
+
+        if piece._move_valid(p1):
             self._move_piece(p0, p1)
         else:
             raise PositionError('Piece cannot be moved to this position')
@@ -280,11 +355,9 @@ class GameBoard(GameObject):
             raise PositionError('Only pieces can be moved')
         elif team != piece.team:
             raise TeamError("This piece doesn't belong to " + team)
-        move = piece._move_valid(p1)
-        if not move:
+        if not piece._move_valid(p1):
             raise PositionError('Piece cannot be moved to this position')
         return self._try_move(p0, p1)
-
 
     def _list_piece_moves(self, piece, check_board=True):
         if isinstance(piece, int):
@@ -328,7 +401,6 @@ class BoardObject(object):
             raise ParentError('This is already part of ' + self.board.name)
         else:
             self.board = board
-            self.idx = len(board.objects)
 
     def _set_team(self, team):
         if team is not None:
@@ -390,7 +462,6 @@ class Piece(BoardObject):
             raise ParentError('This is already part of ' + self.team)
         else:
             self.team = team
-        self.board.pieces[self.team].append(self)
 
     def __repr__(self):
         return 't{0}'.format(self.board.teams.index(self.team))
