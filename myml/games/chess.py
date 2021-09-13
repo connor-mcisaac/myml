@@ -6,7 +6,6 @@ class HomeTile(TeamTile):
 
     def _land_on(self, piece):
         if isinstance(piece, Pawn):
-            """ Need to add calls to the player before implementing this """
             pass
         else:
             pass
