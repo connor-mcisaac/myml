@@ -4,13 +4,20 @@ from myml.utils import create_diag2D, Draw1D, MultiNormal
 
 class Metropolis(object):
 
-    def __init__(self, ndim, nwalkers, lnp, lnl, pargs=[], largs=[]):
+    def __init__(self, ndim, nwalkers, lnp, lnl, pargs=None, largs=None):
+        
         self.ndim = ndim
         self.nwalkers = nwalkers
         self.lnp = lnp
         self.lnl = lnl
-        self.pargs = pargs
-        self.largs = largs
+        if pargs is None:
+            self.pargs = []
+        else:
+            self.pargs = pargs
+        if largs is None:
+            self.largs = []
+        else:
+            self.largs = largs
         self.w = numpy.random.randn(self.nwalkers, self.ndim)
         self.set_q()
 
@@ -88,7 +95,7 @@ class Metropolis(object):
 
 class MetropolisHastings(Metropolis):
 
-    def __init__(self, ndim, nwalkers, lnp, lnl, pargs=[], largs=[]):
+    def __init__(self, ndim, nwalkers, lnp, lnl, pargs=None, largs=None):
         super().__init__(ndim, nwalkers, lnp, lnl, pargs=pargs, largs=largs)
 
     def ratio(self, x):
